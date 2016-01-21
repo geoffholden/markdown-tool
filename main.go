@@ -112,6 +112,8 @@ func main() {
 		os.Exit(-1)
 	}
 
+	input, _ = Parse(input)
+
 	// set up options
 	extensions := 0
 	extensions |= blackfriday.EXTENSION_NO_INTRA_EMPHASIS

@@ -96,6 +96,7 @@ func main() {
 	var input []byte
 	var err error
 	args := flag.Args()
+	imagedir := "files"
 	switch len(args) {
 	case 0:
 		if input, err = ioutil.ReadAll(os.Stdin); err != nil {
@@ -107,12 +108,13 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Error reading from", args[0], ":", err)
 			os.Exit(-1)
 		}
+		imagedir = fmt.Sprintf("%s_files", args[0])
 	default:
 		flag.Usage()
 		os.Exit(-1)
 	}
 
-	input, _ = Parse(input)
+	input, _ = Preprocess(input, imagedir)
 
 	// set up options
 	extensions := 0

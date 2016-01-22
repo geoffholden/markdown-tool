@@ -29,9 +29,15 @@ func Preprocess(input []byte, imagedir string) ([]byte, error) {
 			if !inBlock {
 				sub := r.FindStringSubmatch(scanner.Text())
 				if len(sub) > 1 {
-					inBlock = true
-					format = sub[1]
-					imageCount++
+					switch sub[1] {
+					case
+						"plantuml",
+						"ditaa",
+						"dot":
+						inBlock = true
+						format = sub[1]
+						imageCount++
+					}
 				}
 			} else {
 				inBlock = false

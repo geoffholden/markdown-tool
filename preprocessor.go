@@ -37,7 +37,11 @@ func Preprocess(input []byte, imagedir string) ([]byte, error) {
 						inBlock = true
 						format = sub[1]
 						imageCount++
+					default:
+						fmt.Fprintf(out, "%s\n", scanner.Text())
 					}
+				} else {
+					fmt.Fprintf(out, "%s\n", scanner.Text())
 				}
 			} else {
 				inBlock = false

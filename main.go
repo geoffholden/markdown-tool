@@ -16,6 +16,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"github.com/russross/blackfriday"
@@ -29,11 +30,13 @@ const DEFAULT_TITLE = ""
 
 func main() {
 	// parse command-line options
-	var page, toc, toconly, xhtml, latex, smartypants, latexdashes, fractions bool
+	var page, syntax, toc, toconly, xhtml, latex, smartypants, latexdashes, fractions bool
 	var css, cpuprofile string
 	var repeat int
 	flag.BoolVar(&page, "page", false,
 		"Generate a standalone HTML page (implies -latex=false)")
+	flag.BoolVar(&syntax, "syntax", false,
+		"Add HighlightJS syntax highlighting (implies -page=true)")
 	flag.BoolVar(&toc, "toc", false,
 		"Generate a table of contents (implies -latex=false)")
 	flag.BoolVar(&toconly, "toconly", false,
@@ -71,6 +74,10 @@ func main() {
 	// enforce implied options
 	if css != "" {
 		page = true
+	}
+	if syntax {
+		page = true
+		xhtml = true
 	}
 	if page {
 		latex = false
@@ -125,6 +132,7 @@ func main() {
 	extensions |= blackfriday.EXTENSION_STRIKETHROUGH
 	extensions |= blackfriday.EXTENSION_SPACE_HEADERS
 
+	title := ""
 	var renderer blackfriday.Renderer
 	if latex {
 		// render the data into LaTeX
@@ -144,10 +152,11 @@ func main() {
 		if latexdashes {
 			htmlFlags |= blackfriday.HTML_SMARTYPANTS_LATEX_DASHES
 		}
-		title := ""
 		if page {
-			htmlFlags |= blackfriday.HTML_COMPLETE_PAGE
 			title = getTitle(input)
+			if !syntax {
+				htmlFlags |= blackfriday.HTML_COMPLETE_PAGE
+			}
 		}
 		if toconly {
 			htmlFlags |= blackfriday.HTML_OMIT_CONTENTS
@@ -176,9 +185,46 @@ func main() {
 		out = os.Stdout
 	}
 
+	if syntax {
+		var buf bytes.Buffer
+		buf.WriteString("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" ")
+		buf.WriteString("\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n")
+		buf.WriteString("<html xmlns=\"http://www.w3.org/1999/xhtml\">\n")
+		buf.WriteString("<head>\n")
+		buf.WriteString("  <title>")
+		buf.WriteString(title)
+		buf.WriteString("</title>\n")
+		buf.WriteString("  <meta name=\"GENERATOR\" content=\"Blackfriday Markdown Processor v")
+		buf.WriteString(blackfriday.VERSION)
+		buf.WriteString("\" />\n")
+		buf.WriteString("  <meta charset=\"utf-8\" />\n")
+		if css != "" {
+			buf.WriteString("  <link rel=\"stylesheet\" type=\"text/css\" href=\"")
+			buf.WriteString(css)
+			buf.WriteString("\" />")
+		}
+		buf.WriteString("  <link rel=\"stylesheet\" href=\"monokai.css\" />\n")
+		buf.WriteString("  <script src=\"highlight.js\"></script>\n")
+		buf.WriteString("  <script>hljs.initHighlightingOnLoad();</script>\n")
+		buf.WriteString("</head>\n")
+		buf.WriteString("<body>\n")
+
+		if _, err = out.Write(buf.Bytes()); err != nil {
+			fmt.Fprintln(os.Stderr, "Error writing output:", err)
+			os.Exit(-1)
+		}
+	}
+
 	if _, err = out.Write(output); err != nil {
 		fmt.Fprintln(os.Stderr, "Error writing output:", err)
 		os.Exit(-1)
+	}
+
+	if syntax {
+		if _, err = out.WriteString("\n</body>\n</html>\n"); err != nil {
+			fmt.Fprintln(os.Stderr, "Error writing output:", err)
+			os.Exit(-1)
+		}
 	}
 }
 

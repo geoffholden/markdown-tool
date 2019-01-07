@@ -19,18 +19,19 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/russross/blackfriday"
 	"io/ioutil"
 	"os"
 	"runtime/pprof"
 	"strings"
+
+	"github.com/russross/blackfriday/v2"
 )
 
 const DEFAULT_TITLE = ""
 
 func main() {
 	// parse command-line options
-	var page, syntax, toc, toconly, xhtml, latex, smartypants, latexdashes, fractions bool
+	var page, syntax, toc, toconly, xhtml, smartypants, latexdashes, fractions bool
 	var css, cpuprofile string
 	var repeat int
 	flag.BoolVar(&page, "page", false,
@@ -43,8 +44,6 @@ func main() {
 		"Generate a table of contents only (implies -toc)")
 	flag.BoolVar(&xhtml, "xhtml", true,
 		"Use XHTML-style tags in HTML output")
-	flag.BoolVar(&latex, "latex", false,
-		"Generate LaTeX output instead of HTML")
 	flag.BoolVar(&smartypants, "smartypants", true,
 		"Apply smartypants-style substitutions")
 	flag.BoolVar(&latexdashes, "latexdashes", true,
@@ -58,7 +57,7 @@ func main() {
 	flag.IntVar(&repeat, "repeat", 1,
 		"Process the input multiple times (for benchmarking)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Blackfriday Markdown Processor v"+blackfriday.VERSION+
+		fmt.Fprintf(os.Stderr, "Blackfriday Markdown Processor v"+blackfriday.Version+
 			"\nAvailable at http://github.com/russross/blackfriday\n\n"+
 			"Copyright © 2011 Russ Ross <russ@russross.com>\n"+
 			"Distributed under the Simplified BSD License\n"+
@@ -79,14 +78,8 @@ func main() {
 		page = true
 		xhtml = true
 	}
-	if page {
-		latex = false
-	}
 	if toconly {
 		toc = true
-	}
-	if toc {
-		latex = false
 	}
 
 	// turn on profiling?
@@ -124,53 +117,44 @@ func main() {
 	input, _ = Preprocess(input, imagedir)
 
 	// set up options
-	extensions := 0
-	extensions |= blackfriday.EXTENSION_NO_INTRA_EMPHASIS
-	extensions |= blackfriday.EXTENSION_TABLES
-	extensions |= blackfriday.EXTENSION_FENCED_CODE
-	extensions |= blackfriday.EXTENSION_AUTOLINK
-	extensions |= blackfriday.EXTENSION_STRIKETHROUGH
-	extensions |= blackfriday.EXTENSION_SPACE_HEADERS
+	extensions := blackfriday.CommonExtensions
+	extensions |= blackfriday.Titleblock
+	extensions |= blackfriday.DefinitionLists
 
 	title := ""
-	var renderer blackfriday.Renderer
-	if latex {
-		// render the data into LaTeX
-		renderer = blackfriday.LatexRenderer(0)
-	} else {
-		// render the data into HTML
-		htmlFlags := 0
-		if xhtml {
-			htmlFlags |= blackfriday.HTML_USE_XHTML
-		}
-		if smartypants {
-			htmlFlags |= blackfriday.HTML_USE_SMARTYPANTS
-		}
-		if fractions {
-			htmlFlags |= blackfriday.HTML_SMARTYPANTS_FRACTIONS
-		}
-		if latexdashes {
-			htmlFlags |= blackfriday.HTML_SMARTYPANTS_LATEX_DASHES
-		}
-		if page {
-			title = getTitle(input)
-			if !syntax {
-				htmlFlags |= blackfriday.HTML_COMPLETE_PAGE
-			}
-		}
-		if toconly {
-			htmlFlags |= blackfriday.HTML_OMIT_CONTENTS
-		}
-		if toc {
-			htmlFlags |= blackfriday.HTML_TOC
-		}
-		renderer = blackfriday.HtmlRenderer(htmlFlags, title, css)
+	// render the data into HTML
+	htmlFlags := blackfriday.CommonHTMLFlags
+	if !xhtml {
+		htmlFlags = htmlFlags & (^blackfriday.UseXHTML)
 	}
+	if !smartypants {
+		htmlFlags = htmlFlags & (^blackfriday.Smartypants)
+	}
+	if !fractions {
+		htmlFlags = htmlFlags & (^blackfriday.SmartypantsFractions)
+	}
+	if !latexdashes {
+		htmlFlags = htmlFlags & (^blackfriday.SmartypantsLatexDashes)
+	}
+	if page {
+		title = getTitle(input)
+		if !syntax {
+			htmlFlags |= blackfriday.CompletePage
+		}
+	}
+	if toc {
+		htmlFlags |= blackfriday.TOC
+	}
+	renderer := blackfriday.NewHTMLRenderer(blackfriday.HTMLRendererParameters{
+		Title: title,
+		CSS:   css,
+		Flags: htmlFlags,
+	})
 
 	// parse and render
 	var output []byte
 	for i := 0; i < repeat; i++ {
-		output = blackfriday.Markdown(input, renderer, extensions)
+		output = blackfriday.Run(input, blackfriday.WithRenderer(renderer), blackfriday.WithExtensions(extensions))
 	}
 
 	// output the result
@@ -195,7 +179,7 @@ func main() {
 		buf.WriteString(title)
 		buf.WriteString("</title>\n")
 		buf.WriteString("  <meta name=\"GENERATOR\" content=\"Blackfriday Markdown Processor v")
-		buf.WriteString(blackfriday.VERSION)
+		buf.WriteString(blackfriday.Version)
 		buf.WriteString("\" />\n")
 		buf.WriteString("  <meta charset=\"utf-8\" />\n")
 		if css != "" {
